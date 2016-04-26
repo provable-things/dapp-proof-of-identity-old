@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Estonian digi-ID onchain revocation list  - Powered by Ethereum + Oraclize</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+	<script type="text/javascript" src="web3.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.6/paper/bootstrap.min.css">
+  <script type="text/javascript" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.5.1/animate.min.css">
+  <noscript>
+    <style type="text/css">
+      .active_javascript {
+        display: initial !important;
+        font-size: 1.4em;
+        left: 0;
+        right: 0;
+        position: fixed;
+        z-index: 100000000;
+        background-color: #FFF000;
+        border-bottom: 1px solid #B9B129;
+      }
+    </style>
+  </noscript>
+
+  <style type="text/css">
+  .right {
+    text-align:right;
+  }
+  .left {
+    text-align: left;
+  }
+  .center {
+    text-align: center;
+  }
+  .fright {
+    float: right;
+  }
+  .fleft {
+    float: left;
+  }
+  .show {
+    display: initial !important;
+  }
+  .alert-info {
+    background-color: #949EFF !important;
+    border: 1px solid #6674FF;
+  }
+  .alert-success {
+    border: 1px solid #398A3D;
+  }
+  .b {
+    text-decoration: underline;
+  }
+
+  #bback > a:hover {
+    border-bottom:1px solid #0a6ebd !important;
+  }
+
+  .mt20 {
+    margin-top: 20px;
+  }
+  </style>
+</head>
+<body>
+<span class="active_javascript center" style="display:none;">Javascript is required, please enable it</span>
+
+<div style="position: absolute; left: 0; top: 0; padding: 5px 0 0 5px; font-size: 1.05em;" id="bback">
+  <a href="http://dapps.oraclize.it/" style="border-bottom: 1px dotted #2196F3; text-decoration: none;"><span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span> Ðapps list</a>
+</div>
+<div class="container">
+  <div class="row">
+    <div class="col-md-12">
+     <div class="page-header">
+        <h2>Estonian digi-ID onchain revocation list</h2>
+          <div class="fright right">
+      <button type="button" class="btn" data-toggle="collapse" data-target="#collapsedit" id="buttoncollapseid">Advanced mode</button>
+        </div>
+        <p class="lead">Onchain interface to let any contract verify that a given Estonian <br>digi-id certificate is still valid<br> </p><span class="text-muted">Powered by <a href="https://www.ethereum.org/" target="_blank">Ethereum</a> + <a href="http://www.oraclize.it" target="_blank">Oraclize</a></span>
+      </div>
+
+  <div id="collapsedit" class="collapse">
+      <div class="row">
+        <div class="col-md-6">
+        <div class="form-inline">
+          <div class="form-group">
+              <label for="contractid" class="control-label">Please enter the contract ID:</label>
+              <input type="text" class="form-control" id="contractid" style="width:400px;margin: 0 5px 0 5px;">
+              <span class="btn btn-default" id="submitcontractid">SUBMIT</span>
+          </div>
+        </div>
+        </div>
+
+        <div class="col-md-6">
+        <div class="well" style="overflow: auto;">
+        <div class="center" style="margin-bottom:7px;margin-top:-10px;">
+        <div class="btn-group" role="group" aria-label="..." id="btgr" style="display:none;">
+        </div>
+        </div>
+         <div class="form-inline">
+          <div class="form-group">
+              <label for="ethnode" class="control-label">Connect to eth:</label>
+              <input type="text" class="form-control" id="ethnode" style="width:200px;margin: 0 5px 0 5px;" value="">
+              <span class="btn btn-default" id="submit_ethnode">CONNECT</span>
+          </div>
+        </div>      
+        <div class="fleft" id="connected" style="display:none;">
+          <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> Connected
+        </div>
+        <div class="fleft" id="notconnected" style="display:none;">
+          <span class="glyphicon glyphicon-remove" aria-hidden="true"></span> Error, not connected
+        </div>
+          </div>
+
+        </div>
+        </div>
+      </div>
+</div>
+</div>
+</div>
+
+<div class="container center">
+<h3>Easily check an Estonian digi-id certificate</h3>
+<br>
+<div class="row">
+  <div class="col-md-12 center">
+    <form class="form-inline">
+      <div class="form-group">
+       <label class="sr-only" for="id_rev">Digi-id</label>
+        <input type="text" class="form-control input-lg" id="id_rev_v" style="width:360px;" placeholder="Digi-id">
+      </div>
+      <span id="id_rev" class="btn btn-primary btn-lg">Check</span>
+    </form>
+  </div>
+</div>
+
+<div class="row mt20">
+  <div class="col-md-6 col-md-offset-3 center" id="spawn_result">
+  </div>
+</div>
+</div>
+
+
+<script type="text/javascript">
+var node_list = {
+  'mainnet' : 'http://eth-node-1.oraclize.it',
+  'morden' : 'http://eth-testnet-node-1.oraclize.it',
+  'testnet161' : 'http://eth-testnet161-node-1.oraclize.it/',
+  'local' : 'http://localhost:8545'
+};
+
+var web3,
+    contract_address = "0x5ab03229c2903824854f9ebed084b300f8941769",
+    default_node = node_list['morden'],
+    active_ethnode = default_node
+    previous_id = '';
+
+var abi = [{"constant":true,"inputs":[{"name":"esteID","type":"bytes32"}],"name":"isRevocated","outputs":[{"name":"","type":"bool"}],"type":"function"},{"constant":false,"inputs":[{"name":"myid","type":"bytes32"},{"name":"result","type":"string"},{"name":"proof","type":"bytes"}],"name":"__callback","outputs":[],"type":"function"},{"constant":false,"inputs":[],"name":"init","outputs":[],"type":"function"}];
+
+function start(){
+  $('#contractid').val(contract_address.trim());
+  if(typeof mist !== 'undefined'){
+    $('#ethnode').val('MIST BROWSER');
+    active_ethnode = web3.currentProvider.host;
+    web3 = new Web3(web3.currentProvider);
+  } else if(active_ethnode==default_node){
+    $('#ethnode').val(default_node);
+    web3 = new Web3(new Web3.providers.HttpProvider($('#ethnode').val()));
+  }
+
+  setTimeout(function(){
+    if(web3.isConnected()){
+      $('#connected').show();
+      $('#notconnected').hide();
+    } else {
+      $('#notconnected').show();
+      $('#connected').hide();
+    }
+  }, 50);
+
+}
+
+$('#id_rev_v').on('input', function() { 
+    if(previous_id!=$('#id_rev_v').val() && previous_id!=''){
+      if($('#spawn_result').html().length>200) {
+        $('#result_rev').addClass('animated fadeOutDown');
+        $('#spawn_result').html('');
+      }
+    }
+});
+
+function check_revocated(rev){
+  var c = web3.eth.contract(abi).at(contract_address);
+  previous_id = rev;
+  if(typeof rev == "string"){
+    rev = rev.trim();
+    rev = (rev.substr(0,2)=='0x') ? rev : "0x"+rev;
+  }
+  var result = c.isRevocated(rev);
+  console.log(result);
+  $('#spawn_result').append('<div class="alert alert-dismissible" id="result_rev"> <button type="button" id="dismissa" class="close" data-dismiss="alert">&times;</button> <span id="result_content"></span> </div>');
+
+  // check the result
+  if(result){
+    // is revocated
+    $('#result_content').html('The digi-id <u>is</u> revocated');
+    $('#result_rev').addClass('alert-danger');
+  } else {
+    // is not revocated
+    $('#result_content').html('This digi-id certificate <u>is not</u> revocated');
+    $('#result_rev').addClass('alert-success');
+  }
+
+  $('#result_rev').addClass('animated fadeInDown');
+}
+
+$( "#submit_ethnode" ).click(function() {
+  active_ethnode = $('#ethnode').val();
+  web3 = new Web3(new Web3.providers.HttpProvider(active_ethnode));
+  setTimeout(function(){
+    if(web3.isConnected()){
+      $('#connected').show();
+      $('#notconnected').hide();
+    } else {
+      $('#notconnected').show();
+      $('#connected').hide();
+    }
+  }, 50);
+});
+
+$("#id_rev").click(function() {
+  var id_rev_content = $('#id_rev_v').val();
+  if(id_rev_content){
+    check_revocated(id_rev_content);
+  }
+});
+
+$("#submitcontractid").click(function() {
+  start();
+});
+
+start();
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-59380873-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

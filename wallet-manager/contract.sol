@@ -1,36 +1,102 @@
-//import "https://github.com/axic/ethereum-rsa/rsaverify.sol";
 
-contract CRL {
-    function isRevocated(bytes32 esteID) constant returns(bool);
-}
 
-contract POI {
+contract WalletManager {
 
-    mapping (address => uint) public verifications;
-    mapping (address => string) public commonNames;
-    uint __eid;
+    struct eidWallet {
+        uint balance;
+        bytes modulus;
+        uint nonce;
+    }
 
-    address owner;
+    mapping(uint => eidWallet) eidWallets;
+
     bytes public CAmodulus;
-    address public CRLaddr;
-
+    address owner;
 
     struct crtD { uint eid; bytes modulus; bytes crtSig; string commonName; }
 
-    function POI(){
+    event Withdrawal(uint from, uint amount);
+    event Deposit(uint to, uint amount);
+
+    modifier onlyIfValidToEid(uint from, uint to, uint amount, uint nonce, bytes sig) {
+        //We verify if eid is registered by checking if there is stored pubkey
+        //if (eidWallets[from].modulus.length == 0) throw;
+        //We verify if there is enough balance
+        if (eidWallets[from].balance < amount) throw;
+        //We verify if the transaction nonce is more than previous transaction to
+        //prevent replay attack
+        if (nonce <= eidWallets[from].nonce) throw;
+        
+        bytes32 transactionHash = sha3(from + to + amount + nonce);
+        if(!rsaVerify(bytes32_to_bytes(transactionHash), eidWallets[from].modulus, 65537, sig)) throw;
+        _
+    }
+
+    modifier onlyIfValidToAddress(uint from, address to, uint amount, uint nonce, bytes sig) {
+         //We verify if eid is registered by checking if there is stored pubkey
+        //if (eidWallets[from].modulus.length == 0) throw;
+        //We verify if there is enough balance
+        if (eidWallets[from].balance < amount) throw;
+        //We verify if the transaction nonce is more than previous transaction to
+        //prevent replay attack
+        if (nonce <= eidWallets[from].nonce) throw;
+        
+        bytes32 transactionHash = sha3(from + uint(to) + amount + nonce);
+        if(!rsaVerify(bytes32_to_bytes(transactionHash), eidWallets[from].modulus, 65537, sig)) throw;
+        _
+    }
+
+
+    function WalletManager() {
         owner = msg.sender;
     }
+
+    function __callback(bytes32 myid, string result) {
+        if (!this.call(result)) throw;
+
+    }
+
+    function register(bytes cert) {
+        crtD memory returnedCert = isValid(cert);
+        // if empty throw;
+        if (returnedCert.eid != 0) {
+            eidWallets[returnedCert.eid].modulus = returnedCert.modulus;
+        }
+    }
+
+    function () {
+        throw;
+    }
+
+    function deposit(uint to) {
+        Deposit(to, msg.value);
+        eidWallets[to].balance += msg.value;
+    }
+
+    function withdrawalToEid(uint from, uint to, uint amount, uint nonce, bytes sig)
+        onlyIfValidToEid(from, to, amount, nonce, sig) {
+        Withdrawal(from, amount);
+        Deposit(to, amount);
+        eidWallets[from].balance -= amount;
+        eidWallets[from].nonce += 1;
+        eidWallets[to].balance += amount;
+    }
+
+    function withdrawalToAddress(uint from, address to, uint amount, uint nonce, bytes sig)
+        onlyIfValidToAddress(from, to, amount, nonce, sig) {
+            
+        if (to.send(amount)) {
+            Withdrawal(from, amount);
+            eidWallets[from].nonce += 1;
+            eidWallets[from].balance -= amount;
+        }
+    }
+
 
     function setCAmodulus(bytes _CAmodulus) public {
         //00b3e97c6c661eabfda5dc35ede44a934c3aa990a005d4a73cdcaf8652686661ffb247222a65bcd8bab5b5bf94aeec02246c6fae4accc5913846ae95deba8206c33e06ba914f7b0be0171aeefe0d1397b2d8d43afe9596b1d95409cb9883a4c9ca566b18ccf847d03d9b83c446e4c3de81dff7c6ebd65ba77b3dcba58487053963d222425f184e41a7354c627506ce375046426f87544b204dfdb627aafa1b716c134eeb9cc36c90d0b70e3b8b48250a178907d2b54654af4176209d15a6631c4ca48f08c81b3aa7cb1c9129ee186c9e81f40066f797921603011ed644614faad15508406840180bab3935e35a2d53b2c038da69cb190644239197317b5a6e9e75
         if (msg.sender != owner) throw;
         CAmodulus = _CAmodulus;
-    }
-
-    function setCRLaddr(address _CRLaddr) public {
-        // 0x5ab03229c2903824854f9ebed084b300f8941769
-        if (msg.sender != owner) throw;
-        CRLaddr = _CRLaddr;
     }
 
     function rsaVerify(bytes msg, bytes N, uint e, bytes S) internal returns (bool){
@@ -105,27 +171,20 @@ contract POI {
         return out;
     }
 
-    function isValid(bytes _sig, bytes _cert) internal returns (crtD){
+    function isValid(bytes _cert) internal returns (crtD){
         crtD memory mycrtD = getCrtDetails(_cert);
         crtD memory mycrtD_empty;
         if (!rsaVerify(bytes32_to_bytes(sha256(_cert)), CAmodulus, 65537, mycrtD.crtSig)) return mycrtD_empty; //bad cert
-        if (!rsaVerify(bytes32_to_bytes(sha256(msg.sender)), mycrtD.modulus, 65537, _sig)) return mycrtD_empty; //bad sig
-        if (CRL(CRLaddr).isRevocated(bytes32(mycrtD.eid))) return mycrtD_empty; //revocated
         return mycrtD;
     }
 
-    function linkEID(bytes _sig, bytes _cert) public returns (bool){
-        crtD memory mycrtD = isValid(_sig, _cert);
-        if (mycrtD.eid != 0){
-            verifications[msg.sender] = mycrtD.eid;
-            commonNames[msg.sender] = mycrtD.commonName;
-        }
-        return mycrtD.eid != 0;
+    function getBalanceOf(uint eid) constant returns(uint) {
+        return eidWallets[eid].balance;
     }
-
-    function unlinkEID(bytes _sig, bytes _cert, address _addr) public {
-        if (isValid(_sig, _cert).eid != 0) verifications[_addr] = 0;
+    
+     function getNonceOf(uint eid) constant returns(uint) {
+        return eidWallets[eid].nonce;
     }
-
 
 }
+
